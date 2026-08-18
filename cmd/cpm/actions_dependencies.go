@@ -62,7 +62,17 @@ func addAction(ctx context.Context, cmd *cli.Command) error {
 	if m.Dependencies == nil {
 		m.Dependencies = map[string]string{}
 	}
+	options := cmd.StringSlice("cmake-option")
+	if err := cpm.ValidateCMakeOptions(options); err != nil {
+		return err
+	}
+	if m.CMakeOptions == nil {
+		m.CMakeOptions = map[string][]string{}
+	}
 	m.Dependencies[alias] = source
+	if cmd.IsSet("cmake-option") {
+		m.CMakeOptions[alias] = options
+	}
 	return resolvePrepareWrite(ctx, root, m, commandWriter(cmd), "added "+alias)
 }
 
@@ -83,6 +93,7 @@ func removeAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("dependency %q is not declared", alias)
 	}
 	delete(m.Dependencies, alias)
+	delete(m.CMakeOptions, alias)
 	return resolvePrepareWrite(ctx, root, m, commandWriter(cmd), "removed "+alias)
 }
 
@@ -122,7 +133,10 @@ func installAction(ctx context.Context, cmd *cli.Command) error {
 	if lock.ManifestHash != cpm.ManifestHash(manifestBytes) {
 		return fmt.Errorf("cpm.lock does not match cpm.toml; run cpm update")
 	}
-	if err := cpm.NewResolver().Prepare(ctx, root, &lock); err != nil {
+	preparing := newPackageProgress(commandWriter(cmd), len(lock.Packages), "Installing packages")
+	err = cpm.NewResolver().Prepare(ctx, root, &lock, preparing)
+	preparing.Stop(err == nil)
+	if err != nil {
 		return err
 	}
 	fmt.Fprintf(commandWriter(cmd), "installed %d packages\n", len(lock.Packages))

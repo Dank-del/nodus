@@ -27,6 +27,9 @@ func ParseManifest(text string) (Manifest, error) {
 	if m.Dependencies == nil {
 		m.Dependencies = map[string]string{}
 	}
+	if m.CMakeOptions == nil {
+		m.CMakeOptions = map[string][]string{}
+	}
 	if m.Name() == "" {
 		return m, fmt.Errorf("%s must define [project].name or [package].name", ManifestName)
 	}
@@ -52,6 +55,14 @@ func ParseManifest(text string) (Manifest, error) {
 			return m, err
 		}
 	}
+	for alias, options := range m.CMakeOptions {
+		if _, ok := m.Dependencies[alias]; !ok {
+			return m, fmt.Errorf("CMake options are configured for undeclared dependency %q", alias)
+		}
+		if err := ValidateCMakeOptions(options); err != nil {
+			return m, err
+		}
+	}
 	return m, nil
 }
 
@@ -62,6 +73,9 @@ func WriteManifest(root string, m Manifest) error {
 func MarshalManifest(m Manifest) []byte {
 	if m.Dependencies == nil {
 		m.Dependencies = map[string]string{}
+	}
+	if m.CMakeOptions == nil {
+		m.CMakeOptions = map[string][]string{}
 	}
 	if m.Format == 0 {
 		m.Format = 2
@@ -80,7 +94,7 @@ func MarshalManifest(m Manifest) []byte {
 }
 
 func NewManagedManifest(name, projectType string, standard int) Manifest {
-	m := Manifest{Format: 2, Project: Project{Name: name, Version: "0.1.0", Managed: true, Type: projectType}, Build: Build{CPPStandard: standard, AutoDiscoverSources: true, Sources: []string{}, Links: []string{}}, Dependencies: map[string]string{}}
+	m := Manifest{Format: 2, Project: Project{Name: name, Version: "0.1.0", Managed: true, Type: projectType}, Build: Build{CPPStandard: standard, AutoDiscoverSources: true, Sources: []string{}, Links: []string{}}, Dependencies: map[string]string{}, CMakeOptions: map[string][]string{}}
 	normalizeManagedManifest(&m)
 	return m
 }

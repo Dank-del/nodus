@@ -85,6 +85,17 @@ func TestAboutIncludesToolchainStatus(t *testing.T) {
 	}
 }
 
+func TestTargetSummaryTruncatesLargeTargetLists(t *testing.T) {
+	targets := make([]string, 13)
+	for i := range targets {
+		targets[i] = "target" + string(rune('a'+i))
+	}
+	summary := targetSummary(targets)
+	if !strings.Contains(summary, "targeta") || !strings.Contains(summary, "(+1 more)") {
+		t.Fatalf("unexpected summary: %q", summary)
+	}
+}
+
 func withWorkingDirectory(t *testing.T, dir string) {
 	t.Helper()
 	current, err := os.Getwd()

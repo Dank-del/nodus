@@ -29,7 +29,7 @@ func TestParseSourceNormalizesGitHubForms(t *testing.T) {
 
 func TestManifestAndLockRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
-	m := Manifest{Format: 2, Project: Project{Name: "demo", Version: "0.1.0"}, Dependencies: map[string]string{"fmt": "github.com/fmtlib/fmt@v11.1.4"}}
+	m := Manifest{Format: 2, Project: Project{Name: "demo", Version: "0.1.0"}, Dependencies: map[string]string{"fmt": "github.com/fmtlib/fmt@v11.1.4"}, CMakeOptions: map[string][]string{"fmt": {"FMT_TEST=OFF"}}}
 	if err := WriteManifest(tmp, m); err != nil {
 		t.Fatal(err)
 	}
@@ -37,10 +37,10 @@ func TestManifestAndLockRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Dependencies["fmt"] != m.Dependencies["fmt"] {
+	if loaded.Dependencies["fmt"] != m.Dependencies["fmt"] || len(loaded.CMakeOptions["fmt"]) != 1 || loaded.CMakeOptions["fmt"][0] != "FMT_TEST=OFF" {
 		t.Fatalf("got %#v", loaded)
 	}
-	lock := Lock{ManifestHash: ManifestHash(bytes), Packages: []Package{{ID: "github.com/fmtlib/fmt", Name: "fmt", Source: "github.com/fmtlib/fmt", URL: "https://github.com/fmtlib/fmt.git", Requested: "github.com/fmtlib/fmt@v11.1.4", ResolvedRef: "refs/tags/v11.1.4", Commit: "0123456789abcdef", BuildSystem: "cmake", Targets: []string{"fmt::fmt"}}}}
+	lock := Lock{ManifestHash: ManifestHash(bytes), Packages: []Package{{ID: "github.com/fmtlib/fmt", Name: "fmt", Source: "github.com/fmtlib/fmt", URL: "https://github.com/fmtlib/fmt.git", Requested: "github.com/fmtlib/fmt@v11.1.4", ResolvedRef: "refs/tags/v11.1.4", Commit: "0123456789abcdef", BuildSystem: "cmake", Targets: []string{"fmt::fmt"}, CMakeOptions: []string{"FMT_TEST=OFF"}}}}
 	if err := WriteLock(tmp, lock); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestManifestAndLockRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ManifestHash != lock.ManifestHash || len(got.Packages) != 1 || got.Packages[0].Commit != lock.Packages[0].Commit {
+	if got.ManifestHash != lock.ManifestHash || len(got.Packages) != 1 || got.Packages[0].Commit != lock.Packages[0].Commit || len(got.Packages[0].CMakeOptions) != 1 {
 		t.Fatalf("unexpected lock: %#v", got)
 	}
 }

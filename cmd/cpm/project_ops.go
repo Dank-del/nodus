@@ -15,11 +15,16 @@ import (
 func resolvePrepareWrite(ctx context.Context, root string, m cpm.Manifest, out io.Writer, message string) error {
 	b := cpm.MarshalManifest(m)
 	resolver := cpm.NewResolver()
+	resolving := startActivityProgress(out, "Resolving dependencies")
 	lock, err := resolver.Resolve(ctx, root, m, b)
+	resolving.Stop(err == nil)
 	if err != nil {
 		return err
 	}
-	if err := resolver.Prepare(ctx, root, &lock); err != nil {
+	preparing := newPackageProgress(out, len(lock.Packages), "Preparing packages")
+	err = resolver.Prepare(ctx, root, &lock, preparing)
+	preparing.Stop(err == nil)
+	if err != nil {
 		return err
 	}
 	if err := cpm.WriteManifest(root, m); err != nil {
@@ -103,12 +108,14 @@ func branch(last bool) string {
 	return "├── "
 }
 
-func inspect(ctx context.Context, source string, out io.Writer) error {
+func inspect(ctx context.Context, source string, cmakeOptions []string, out io.Writer) error {
 	s, err := cpm.ParseSource(source)
 	if err != nil {
 		return err
 	}
+	resolving := startActivityProgress(out, "Resolving Git source")
 	ref, sha, err := cpm.NewGit().Resolve(ctx, s)
+	resolving.Stop(err == nil)
 	if err != nil {
 		return err
 	}
@@ -117,20 +124,29 @@ func inspect(ctx context.Context, source string, out io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	p := cpm.Package{ID: s.ID(), Name: s.Repo, Source: s.ID(), URL: s.URL, Requested: s.Display(), ResolvedRef: ref, Commit: sha}
+	p := cpm.Package{ID: s.ID(), Name: s.Repo, Source: s.ID(), URL: s.URL, Requested: s.Display(), ResolvedRef: ref, Commit: sha, CMakeOptions: cmakeOptions}
+	fetching := startActivityProgress(out, "Materializing source")
 	path, err := cpm.NewGit().Materialize(ctx, tmp, p)
+	fetching.Stop(err == nil)
 	if err != nil {
 		return err
 	}
+	configuring := startActivityProgress(out, "Inspecting CMake package")
 	kind, targets, err := cpm.ConfigurePackage(ctx, tmp, p, path)
+	configuring.Stop(err == nil)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Repository: %s\nResolved ref: %s\nCommit: %s\nBuild system: %s\n", p.Source, ref, sha, kind)
-	if len(targets) > 0 {
-		fmt.Fprintf(out, "Targets: %s\n", strings.Join(targets, ", "))
-	}
+	renderInspection(out, p, path, kind, targets)
 	return nil
+}
+
+func targetSummary(targets []string) string {
+	const maximum = 12
+	if len(targets) <= maximum {
+		return strings.Join(targets, ", ")
+	}
+	return fmt.Sprintf("%s, ... (+%d more)", strings.Join(targets[:maximum], ", "), len(targets)-maximum)
 }
 
 func clean(root string, out io.Writer) error {

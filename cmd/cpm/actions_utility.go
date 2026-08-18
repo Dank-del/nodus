@@ -34,7 +34,11 @@ func inspectAction(ctx context.Context, cmd *cli.Command) error {
 	if err := requireArgCount(cmd, 1); err != nil {
 		return err
 	}
-	return inspect(ctx, cmd.Args().First(), commandWriter(cmd))
+	options := cmd.StringSlice("cmake-option")
+	if err := cpm.ValidateCMakeOptions(options); err != nil {
+		return err
+	}
+	return inspect(ctx, cmd.Args().First(), options, commandWriter(cmd))
 }
 func cleanAction(_ context.Context, cmd *cli.Command) error {
 	if err := requireArgCount(cmd, 0); err != nil {

@@ -83,15 +83,17 @@ func ParseLock(text string) (Lock, error) {
 }
 
 func setPackageField(p *Package, key, raw string) error {
-	if key == "dependencies" || key == "targets" {
+	if key == "dependencies" || key == "targets" || key == "cmake_options" {
 		v, err := parseStringArray(raw)
 		if err != nil {
 			return err
 		}
 		if key == "dependencies" {
 			p.Dependencies = v
-		} else {
+		} else if key == "targets" {
 			p.Targets = v
+		} else {
+			p.CMakeOptions = v
 		}
 		return nil
 	}
@@ -150,7 +152,7 @@ func WriteLock(root string, lock Lock) error {
 	fmt.Fprintf(&b, "version = 1\nmanifest_hash = %q\n", lock.ManifestHash)
 	for _, p := range lock.Packages {
 		fmt.Fprintf(&b, "\n[[package]]\nid = %q\nname = %q\nsource = %q\nurl = %q\nrequested = %q\nresolved_ref = %q\ncommit = %q\nbuild_system = %q\n", p.ID, p.Name, p.Source, p.URL, p.Requested, p.ResolvedRef, p.Commit, p.BuildSystem)
-		fmt.Fprintf(&b, "targets = %s\ndependencies = %s\n", quoteArray(p.Targets), quoteArray(p.Dependencies))
+		fmt.Fprintf(&b, "targets = %s\ndependencies = %s\ncmake_options = %s\n", quoteArray(p.Targets), quoteArray(p.Dependencies), quoteArray(p.CMakeOptions))
 	}
 	return atomicWrite(filepath.Join(root, LockName), []byte(b.String()), 0o644)
 }

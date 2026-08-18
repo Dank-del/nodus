@@ -95,7 +95,7 @@ func TestManagedLinksRequireKnownTargets(t *testing.T) {
 
 func TestDiscoverCMakeAliases(t *testing.T) {
 	root := t.TempDir()
-	contents := "add_library(example::example ALIAS example)\nadd_executable(example_tool ALIAS tool)\n"
+	contents := "project(example)\nset(TARGET_NAME ${PROJECT_NAME})\nadd_library(${PROJECT_NAME}::${TARGET_NAME} ALIAS example)\nadd_executable(example_tool ALIAS tool)\n"
 	if err := os.WriteFile(filepath.Join(root, "CMakeLists.txt"), []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}

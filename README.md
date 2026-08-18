@@ -97,6 +97,10 @@ tracks project-relative files outside `src/` explicitly. `cpm link` accepts
 only targets discovered in the resolved CPM lockfile, preventing misspelled or
 unknown links.
 
+Long-running dependency operations show colored terminal progress for Git
+resolution, source materialization, and CMake inspection. CPM keeps redirected
+output clean for CI and scripts.
+
 ### Add CPM to an existing project
 
 ```bash
@@ -205,6 +209,26 @@ names documented by that project, such as `fmt::fmt`. For a repository without
 Every CMake dependency is configured in an isolated `.cpm/build/` directory.
 If configuration fails, CPM stops and preserves `cpm-configure.log` so the
 upstream failure can be diagnosed without losing the checkout.
+
+### CMake options
+
+Some upstream projects expose optional features or require platform-specific
+CMake cache settings. Pass them generically—without CPM carrying library-
+specific behavior—when adding or inspecting a dependency:
+
+```bash
+cpm add --cmake-option FOO_BUILD_TESTS=OFF github.com/example/foo
+cpm inspect --cmake-option FOO_USE_SYSTEM_DEPENDENCY=ON github.com/example/foo
+```
+
+Options added with `cpm add` are stored by dependency alias in `cpm.toml` and
+recorded in `cpm.lock`, so `install`, `update`, and managed-project builds use
+the same CMake configuration:
+
+```toml
+[cmake_options]
+foo = ["FOO_BUILD_TESTS=OFF"]
+```
 
 ## HTTP client end-to-end example
 

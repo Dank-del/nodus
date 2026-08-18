@@ -33,11 +33,15 @@ func configureCMake(ctx context.Context, root string, p Package, source string) 
 	if err := os.WriteFile(filepath.Join(query, "codemodel-v2"), nil, 0o644); err != nil {
 		return "", nil, err
 	}
-	cmd := exec.CommandContext(ctx, "cmake", "-S", source, "-B", build)
+	args := []string{"-S", source, "-B", build}
+	for _, option := range p.CMakeOptions {
+		args = append(args, "-D"+option)
+	}
+	cmd := exec.CommandContext(ctx, "cmake", args...)
 	out, err := cmd.CombinedOutput()
 	_ = os.WriteFile(filepath.Join(build, "cpm-configure.log"), out, 0o644)
 	if err != nil {
-		return "", nil, fmt.Errorf("cmake configuration failed (log: %s): %w\n%s", filepath.Join(build, "cpm-configure.log"), err, strings.TrimSpace(string(out)))
+		return "", nil, fmt.Errorf("cmake configuration failed (log: %s): %w\n%s", filepath.Join(build, "cpm-configure.log"), err, tailLines(string(out), 20))
 	}
 	targets, err := readTargets(filepath.Join(build, ".cmake", "api", "v1", "reply"))
 	if err != nil {
@@ -49,6 +53,14 @@ func configureCMake(ctx context.Context, root string, p Package, source string) 
 	}
 	targets = uniqueSorted(append(targets, aliases...))
 	return "cmake", targets, nil
+}
+
+func tailLines(value string, count int) string {
+	lines := strings.Split(strings.TrimSpace(value), "\n")
+	if len(lines) <= count {
+		return strings.Join(lines, "\n")
+	}
+	return strings.Join(lines[len(lines)-count:], "\n")
 }
 
 func requireCMake(ctx context.Context) error {
@@ -126,7 +138,7 @@ func safePath(value string) string {
 }
 
 func discoverCMakeAliases(source string) ([]string, error) {
-	aliases := []string{}
+	var cmakeFiles []string
 	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -134,29 +146,79 @@ func discoverCMakeAliases(source string) ([]string, error) {
 		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "build") {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() || entry.Name() != "CMakeLists.txt" {
-			return nil
-		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		for _, line := range strings.Split(string(contents), "\n") {
-			line = strings.TrimSpace(strings.SplitN(line, "#", 2)[0])
-			lower := strings.ToLower(line)
-			if !(strings.HasPrefix(lower, "add_library(") || strings.HasPrefix(lower, "add_executable(")) || !strings.Contains(strings.ToUpper(line), " ALIAS") {
-				continue
-			}
-			open := strings.Index(line, "(")
-			fields := strings.Fields(line[open+1:])
-			if len(fields) >= 2 && strings.EqualFold(fields[1], "ALIAS") {
-				aliases = append(aliases, fields[0])
-			}
+		if !entry.IsDir() && entry.Name() == "CMakeLists.txt" {
+			cmakeFiles = append(cmakeFiles, path)
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	sort.Strings(cmakeFiles)
+	variables := map[string]string{}
+	aliases := []string{}
+	for _, path := range cmakeFiles {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		for _, line := range strings.Split(string(contents), "\n") {
+			line = strings.TrimSpace(strings.SplitN(line, "#", 2)[0])
+			if line == "" {
+				continue
+			}
+			lower := strings.ToLower(line)
+			if strings.HasPrefix(lower, "project(") {
+				fields := cmakeFields(line)
+				if len(fields) > 0 {
+					variables["PROJECT_NAME"] = expandCMakeVariables(fields[0], variables)
+				}
+				continue
+			}
+			if strings.HasPrefix(lower, "set(") {
+				fields := cmakeFields(line)
+				if len(fields) >= 2 {
+					variables[fields[0]] = expandCMakeVariables(fields[1], variables)
+				}
+				continue
+			}
+			if !(strings.HasPrefix(lower, "add_library(") || strings.HasPrefix(lower, "add_executable(")) || !strings.Contains(strings.ToUpper(line), " ALIAS") {
+				continue
+			}
+			fields := cmakeFields(line)
+			if len(fields) >= 2 && strings.EqualFold(fields[1], "ALIAS") {
+				aliases = append(aliases, expandCMakeVariables(fields[0], variables))
+			}
+		}
+	}
 	return uniqueSorted(aliases), nil
+}
+
+func cmakeFields(line string) []string {
+	open, close := strings.Index(line, "("), strings.LastIndex(line, ")")
+	if open < 0 || close <= open {
+		return nil
+	}
+	return strings.Fields(strings.TrimSpace(line[open+1 : close]))
+}
+
+func expandCMakeVariables(value string, variables map[string]string) string {
+	for range len(variables) + 1 {
+		start := strings.Index(value, "${")
+		if start < 0 {
+			return value
+		}
+		end := strings.Index(value[start:], "}")
+		if end < 0 {
+			return value
+		}
+		end += start
+		name := value[start+2 : end]
+		replacement, ok := variables[name]
+		if !ok {
+			return value
+		}
+		value = value[:start] + replacement + value[end+1:]
+	}
+	return value
 }

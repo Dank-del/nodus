@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 type Git struct{ Command string }
@@ -66,23 +65,6 @@ func (g Git) EnsureMirror(ctx context.Context, source Source) (string, error) {
 		return "", err
 	}
 	return mirror, nil
-}
-
-// Shared mirrors are mutable. A per-mirror advisory lock makes concurrent CPM
-// runs wait instead of racing clone, fetch, or remote-url changes.
-func lockMirror(mirror string) (func(), error) {
-	if err := os.MkdirAll(filepath.Dir(mirror), 0o755); err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(mirror+".lock", os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, fmt.Errorf("lock shared Git mirror: %w", err)
-	}
-	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
 }
 
 func (g Git) Resolve(ctx context.Context, source Source) (resolvedRef, commit string, err error) {

@@ -1,6 +1,9 @@
 package cpm
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	ManifestName = "cpm.toml"
@@ -10,11 +13,12 @@ const (
 )
 
 type Manifest struct {
-	Format       int               `toml:"format"`
-	Project      Project           `toml:"project"`
-	Package      PackageMetadata   `toml:"package,omitempty"`
-	Build        Build             `toml:"build"`
-	Dependencies map[string]string `toml:"dependencies"`
+	Format       int                 `toml:"format"`
+	Project      Project             `toml:"project"`
+	Package      PackageMetadata     `toml:"package,omitempty"`
+	Build        Build               `toml:"build"`
+	Dependencies map[string]string   `toml:"dependencies"`
+	CMakeOptions map[string][]string `toml:"cmake_options,omitempty"`
 }
 
 type Project struct {
@@ -74,6 +78,7 @@ type Package struct {
 	BuildSystem  string
 	Targets      []string
 	Dependencies []string
+	CMakeOptions []string
 }
 
 type Lock struct {
@@ -105,6 +110,23 @@ func ValidateAlias(alias string) error {
 	for _, r := range alias {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
 			return fmt.Errorf("dependency name %q may only contain letters, digits, '_' and '-'", alias)
+		}
+	}
+	return nil
+}
+
+// ValidateCMakeOptions accepts the portable subset shared by CMake's -D flag
+// and the CPM manifest: KEY=VALUE. Values remain opaque to CPM.
+func ValidateCMakeOptions(options []string) error {
+	for _, option := range options {
+		key, value, ok := strings.Cut(option, "=")
+		if !ok || key == "" || value == "" {
+			return fmt.Errorf("CMake option %q must use KEY=VALUE", option)
+		}
+		for index, r := range key {
+			if !(r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || index > 0 && r >= '0' && r <= '9') {
+				return fmt.Errorf("CMake option key %q may only contain letters, digits, and '_'", key)
+			}
 		}
 	}
 	return nil

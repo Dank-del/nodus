@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sort"
 )
 
@@ -13,13 +14,21 @@ type Resolver struct{ Git Git }
 
 func NewResolver() Resolver { return Resolver{Git: NewGit()} }
 
+// PackagePreparationReporter receives lifecycle updates while locked packages
+// are materialized and inspected. The resolver stays presentation-agnostic;
+// the CLI can render these events as terminal progress bars.
+type PackagePreparationReporter interface {
+	StartPackage(Package)
+	CompletePackage(Package)
+}
+
 // Resolve walks only CPM manifests. It deliberately never guesses dependency
 // edges from CMake files, whose syntax and side effects are project-specific.
 func (r Resolver) Resolve(ctx context.Context, root string, manifest Manifest, manifestBytes []byte) (Lock, error) {
 	packages := map[string]Package{}
 	requestedAt := map[string]string{}
-	var visit func(alias, raw, parent string) (string, error)
-	visit = func(alias, raw, parent string) (string, error) {
+	var visit func(alias, raw, parent string, cmakeOptions []string) (string, error)
+	visit = func(alias, raw, parent string, cmakeOptions []string) (string, error) {
 		source, err := ParseSource(raw)
 		if err != nil {
 			return "", fmt.Errorf("%s dependency %q: %w", parent, alias, err)
@@ -33,9 +42,12 @@ func (r Resolver) Resolve(ctx context.Context, root string, manifest Manifest, m
 			if existing.Commit != sha {
 				return "", fmt.Errorf("version conflict for %s: %s resolved to %s, but %s resolved to %s; align the manifests", id, requestedAt[id], existing.Commit, source.Display(), sha)
 			}
+			if !slices.Equal(existing.CMakeOptions, cmakeOptions) {
+				return "", fmt.Errorf("CMake option conflict for %s; align dependency CMake options", id)
+			}
 			return id, nil
 		}
-		p := Package{ID: id, Name: alias, Source: id, URL: source.URL, Requested: source.Display(), ResolvedRef: ref, Commit: sha}
+		p := Package{ID: id, Name: alias, Source: id, URL: source.URL, Requested: source.Display(), ResolvedRef: ref, Commit: sha, CMakeOptions: append([]string(nil), cmakeOptions...)}
 		packages[id] = p
 		requestedAt[id] = source.Display()
 
@@ -52,7 +64,7 @@ func (r Resolver) Resolve(ctx context.Context, root string, manifest Manifest, m
 		if err == nil {
 			names := sortedKeys(childManifest.Dependencies)
 			for _, childAlias := range names {
-				childID, err := visit(childAlias, childManifest.Dependencies[childAlias], id)
+				childID, err := visit(childAlias, childManifest.Dependencies[childAlias], id, childManifest.CMakeOptions[childAlias])
 				if err != nil {
 					return "", err
 				}
@@ -64,7 +76,7 @@ func (r Resolver) Resolve(ctx context.Context, root string, manifest Manifest, m
 		return id, nil
 	}
 	for _, alias := range sortedKeys(manifest.Dependencies) {
-		if _, err := visit(alias, manifest.Dependencies[alias], manifest.Name()); err != nil {
+		if _, err := visit(alias, manifest.Dependencies[alias], manifest.Name(), manifest.CMakeOptions[alias]); err != nil {
 			return Lock{}, err
 		}
 	}
@@ -85,9 +97,12 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-func (r Resolver) Prepare(ctx context.Context, root string, lock *Lock) error {
+func (r Resolver) Prepare(ctx context.Context, root string, lock *Lock, reporter PackagePreparationReporter) error {
 	for i := range lock.Packages {
 		p := &lock.Packages[i]
+		if reporter != nil {
+			reporter.StartPackage(*p)
+		}
 		path, err := r.Git.Materialize(ctx, root, *p)
 		if err != nil {
 			return err
@@ -97,6 +112,9 @@ func (r Resolver) Prepare(ctx context.Context, root string, lock *Lock) error {
 			return fmt.Errorf("configure %s: %w", p.ID, err)
 		}
 		p.BuildSystem, p.Targets = kind, targets
+		if reporter != nil {
+			reporter.CompletePackage(*p)
+		}
 	}
 	return GenerateCMake(root, *lock)
 }
