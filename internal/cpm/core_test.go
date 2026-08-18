@@ -29,7 +29,7 @@ func TestParseSourceNormalizesGitHubForms(t *testing.T) {
 
 func TestManifestAndLockRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
-	m := Manifest{ProjectName: "demo", ProjectVersion: "0.1.0", Dependencies: map[string]string{"fmt": "github.com/fmtlib/fmt@v11.1.4"}}
+	m := Manifest{ProjectName: "demo", ProjectVersion: Version, Dependencies: map[string]string{"fmt": "github.com/fmtlib/fmt@v11.1.4"}}
 	if err := WriteManifest(tmp, m); err != nil {
 		t.Fatal(err)
 	}

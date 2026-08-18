@@ -72,6 +72,10 @@ func requireCMake(ctx context.Context) error {
 	return nil
 }
 
+// RequireCMake checks the system CMake prerequisite without configuring a
+// dependency. It is used by `cpm about` to report CMake readiness.
+func RequireCMake() error { return requireCMake(context.Background()) }
+
 func readTargets(reply string) ([]string, error) {
 	entries, err := os.ReadDir(reply)
 	if err != nil {

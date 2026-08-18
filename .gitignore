@@ -1,0 +1,5 @@
+# Local Go build output for this module.
+/cpm
+
+# CPM project state when this repository is used to exercise the CLI.
+/.cpm/

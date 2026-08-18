@@ -5,6 +5,8 @@ import "fmt"
 const (
 	ManifestName = "cpm.toml"
 	LockName     = "cpm.lock"
+	// Version remains pre-release until the package format and CLI contract are stable.
+	Version = "0.0.1-alpha"
 )
 
 type Manifest struct {

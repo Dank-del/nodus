@@ -86,9 +86,9 @@ func MarshalManifest(m Manifest) []byte {
 	}
 	var b strings.Builder
 	if m.ProjectName != "" {
-		fmt.Fprintf(&b, "[project]\nname = %q\nversion = %q\n", m.ProjectName, valueOr(m.ProjectVersion, "0.1.0"))
+		fmt.Fprintf(&b, "[project]\nname = %q\nversion = %q\n", m.ProjectName, valueOr(m.ProjectVersion, Version))
 	} else {
-		fmt.Fprintf(&b, "[package]\nname = %q\nversion = %q\n", m.PackageName, valueOr(m.PackageVersion, "0.1.0"))
+		fmt.Fprintf(&b, "[package]\nname = %q\nversion = %q\n", m.PackageName, valueOr(m.PackageVersion, Version))
 	}
 	b.WriteString("\n[dependencies]\n")
 	names := make([]string, 0, len(m.Dependencies))
