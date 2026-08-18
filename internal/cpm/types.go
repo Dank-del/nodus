@@ -10,19 +10,40 @@ const (
 )
 
 type Manifest struct {
-	ProjectName    string
-	ProjectVersion string
-	PackageName    string
-	PackageVersion string
-	Dependencies   map[string]string
+	Format       int               `toml:"format"`
+	Project      Project           `toml:"project"`
+	Package      PackageMetadata   `toml:"package,omitempty"`
+	Build        Build             `toml:"build"`
+	Dependencies map[string]string `toml:"dependencies"`
+}
+
+type Project struct {
+	Name    string `toml:"name"`
+	Version string `toml:"version"`
+	Managed bool   `toml:"managed"`
+	Type    string `toml:"type"`
+}
+
+type PackageMetadata struct {
+	Name    string `toml:"name"`
+	Version string `toml:"version"`
+}
+
+type Build struct {
+	CPPStandard         int      `toml:"cpp_standard"`
+	AutoDiscoverSources bool     `toml:"auto_discover_sources"`
+	Sources             []string `toml:"sources"`
+	Links               []string `toml:"links"`
 }
 
 func (m Manifest) Name() string {
-	if m.ProjectName != "" {
-		return m.ProjectName
+	if m.Project.Name != "" {
+		return m.Project.Name
 	}
-	return m.PackageName
+	return m.Package.Name
 }
+
+func (m Manifest) Managed() bool { return m.Format == 2 && m.Project.Managed }
 
 type Source struct {
 	Host, Owner, Repo string

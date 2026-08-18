@@ -81,3 +81,10 @@ func requireArgCount(cmd *cli.Command, count int) error {
 	}
 	return nil
 }
+
+func requireAtLeastOneArg(cmd *cli.Command) error {
+	if cmd.NArg() == 0 {
+		return fmt.Errorf("expected at least one argument; see cpm %s --help", cmd.Name)
+	}
+	return nil
+}

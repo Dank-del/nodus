@@ -40,11 +40,27 @@ func TestInitUsesFrameworkFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.ProjectName != "demo" || m.ProjectVersion != cpm.Version {
+	if m.Project.Name != "demo" || m.Project.Version != "0.1.0" {
 		t.Fatalf("unexpected manifest: %#v", m)
 	}
 	if !strings.Contains(out.String(), "created cpm.toml") {
 		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestNewScaffoldsManagedProject(t *testing.T) {
+	root := t.TempDir()
+	var out, errOut bytes.Buffer
+	project := filepath.Join(root, "hello")
+	if err := newApp(&out, &errOut).Run(context.Background(), []string{"cpm", "new", project, "--type", "library"}); err != nil {
+		t.Fatal(err)
+	}
+	m, _, err := cpm.LoadManifest(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.Managed() || m.Project.Type != "library" {
+		t.Fatalf("unexpected manifest: %#v", m)
 	}
 }
 

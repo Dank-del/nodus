@@ -28,6 +28,13 @@ func about(root string, out io.Writer) {
 	fmt.Fprintf(out, "  Manifest: %s\n", fileStatus(filepath.Join(root, cpm.ManifestName)))
 	fmt.Fprintf(out, "  Lockfile: %s\n", fileStatus(filepath.Join(root, cpm.LockName)))
 	fmt.Fprintf(out, "  Local CPM state: %s\n", fileStatus(filepath.Join(root, ".cpm")))
+	if manifest, _, err := cpm.LoadManifest(root); err == nil {
+		if manifest.Managed() {
+			fmt.Fprintf(out, "  Managed target: %s (%s, C++%d)\n", manifest.TargetName(), manifest.Project.Type, manifest.Build.CPPStandard)
+		} else {
+			fmt.Fprintln(out, "  Managed target: not a CPM-managed project")
+		}
+	}
 	fmt.Fprintln(out, "\nToolchain entries are detected only; CPM does not compile or configure a project for this command.")
 	fmt.Fprintln(out, "This is an alpha release. CLI, manifest, and lockfile formats may change before the first stable release.")
 }

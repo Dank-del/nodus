@@ -1,13 +1,12 @@
 package cpm
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func LoadManifest(root string) (Manifest, []byte, error) {
@@ -21,57 +20,37 @@ func LoadManifest(root string) (Manifest, []byte, error) {
 }
 
 func ParseManifest(text string) (Manifest, error) {
-	m := Manifest{Dependencies: map[string]string{}}
-	section := ""
-	s := bufio.NewScanner(strings.NewReader(text))
-	lineNo := 0
-	for s.Scan() {
-		lineNo++
-		line := strings.TrimSpace(strings.SplitN(s.Text(), "#", 2)[0])
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(line[1 : len(line)-1])
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			return m, fmt.Errorf("%s:%d: expected key = value", ManifestName, lineNo)
-		}
-		key := strings.TrimSpace(parts[0])
-		raw := strings.TrimSpace(parts[1])
-		value, err := strconv.Unquote(raw)
-		if err != nil {
-			return m, fmt.Errorf("%s:%d: values must be quoted strings: %w", ManifestName, lineNo, err)
-		}
-		switch section {
-		case "project":
-			if key == "name" {
-				m.ProjectName = value
-			} else if key == "version" {
-				m.ProjectVersion = value
-			}
-		case "package":
-			if key == "name" {
-				m.PackageName = value
-			} else if key == "version" {
-				m.PackageVersion = value
-			}
-		case "dependencies":
-			if err := ValidateAlias(key); err != nil {
-				return m, err
-			}
-			m.Dependencies[key] = value
-		default:
-			return m, fmt.Errorf("%s:%d: unsupported section [%s]", ManifestName, lineNo, section)
-		}
+	var m Manifest
+	if err := toml.Unmarshal([]byte(text), &m); err != nil {
+		return m, fmt.Errorf("parse %s: %w", ManifestName, err)
 	}
-	if err := s.Err(); err != nil {
-		return m, err
+	if m.Dependencies == nil {
+		m.Dependencies = map[string]string{}
 	}
 	if m.Name() == "" {
 		return m, fmt.Errorf("%s must define [project].name or [package].name", ManifestName)
+	}
+	if m.Format != 0 && m.Format != 2 {
+		return m, fmt.Errorf("unsupported %s format %d", ManifestName, m.Format)
+	}
+	if m.Project.Managed {
+		if m.Format != 2 {
+			return m, fmt.Errorf("managed projects require format = 2")
+		}
+		if m.Project.Type != "executable" && m.Project.Type != "library" {
+			return m, fmt.Errorf("managed project type must be executable or library")
+		}
+		if m.Build.CPPStandard < 11 {
+			return m, fmt.Errorf("managed projects require cpp_standard >= 11")
+		}
+		if err := validatePaths(m.Build.Sources); err != nil {
+			return m, err
+		}
+	}
+	for alias := range m.Dependencies {
+		if err := ValidateAlias(alias); err != nil {
+			return m, err
+		}
 	}
 	return m, nil
 }
@@ -84,27 +63,53 @@ func MarshalManifest(m Manifest) []byte {
 	if m.Dependencies == nil {
 		m.Dependencies = map[string]string{}
 	}
-	var b strings.Builder
-	if m.ProjectName != "" {
-		fmt.Fprintf(&b, "[project]\nname = %q\nversion = %q\n", m.ProjectName, valueOr(m.ProjectVersion, Version))
-	} else {
-		fmt.Fprintf(&b, "[package]\nname = %q\nversion = %q\n", m.PackageName, valueOr(m.PackageVersion, Version))
+	if m.Format == 0 {
+		m.Format = 2
 	}
-	b.WriteString("\n[dependencies]\n")
-	names := make([]string, 0, len(m.Dependencies))
-	for name := range m.Dependencies {
-		names = append(names, name)
+	if m.Project.Version == "" {
+		m.Project.Version = "0.1.0"
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		fmt.Fprintf(&b, "%s = %q\n", name, m.Dependencies[name])
+	if m.Project.Managed {
+		normalizeManagedManifest(&m)
 	}
-	return []byte(b.String())
+	data, err := toml.Marshal(m)
+	if err != nil {
+		panic(fmt.Sprintf("marshal manifest: %v", err))
+	}
+	return data
 }
 
-func valueOr(value, fallback string) string {
-	if value == "" {
-		return fallback
+func NewManagedManifest(name, projectType string, standard int) Manifest {
+	m := Manifest{Format: 2, Project: Project{Name: name, Version: "0.1.0", Managed: true, Type: projectType}, Build: Build{CPPStandard: standard, AutoDiscoverSources: true, Sources: []string{}, Links: []string{}}, Dependencies: map[string]string{}}
+	normalizeManagedManifest(&m)
+	return m
+}
+
+func normalizeManagedManifest(m *Manifest) {
+	m.Build.Sources = uniqueSorted(m.Build.Sources)
+	m.Build.Links = uniqueSorted(m.Build.Links)
+}
+
+func uniqueSorted(values []string) []string {
+	set := map[string]bool{}
+	for _, value := range values {
+		if value != "" {
+			set[value] = true
+		}
 	}
-	return value
+	out := make([]string, 0, len(set))
+	for value := range set {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func validatePaths(paths []string) error {
+	for _, path := range paths {
+		if filepath.IsAbs(path) || path == ".." || len(path) >= 3 && path[:3] == "../" {
+			return fmt.Errorf("managed source path %q must be project-relative", path)
+		}
+	}
+	return nil
 }

@@ -43,6 +43,11 @@ func configureCMake(ctx context.Context, root string, p Package, source string) 
 	if err != nil {
 		return "", nil, err
 	}
+	aliases, err := discoverCMakeAliases(source)
+	if err != nil {
+		return "", nil, err
+	}
+	targets = uniqueSorted(append(targets, aliases...))
 	return "cmake", targets, nil
 }
 
@@ -118,4 +123,40 @@ func readTargets(reply string) ([]string, error) {
 
 func safePath(value string) string {
 	return strings.NewReplacer("/", "_", ":", "_", "@", "_").Replace(value)
+}
+
+func discoverCMakeAliases(source string) ([]string, error) {
+	aliases := []string{}
+	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "build") {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || entry.Name() != "CMakeLists.txt" {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(contents), "\n") {
+			line = strings.TrimSpace(strings.SplitN(line, "#", 2)[0])
+			lower := strings.ToLower(line)
+			if !(strings.HasPrefix(lower, "add_library(") || strings.HasPrefix(lower, "add_executable(")) || !strings.Contains(strings.ToUpper(line), " ALIAS") {
+				continue
+			}
+			open := strings.Index(line, "(")
+			fields := strings.Fields(line[open+1:])
+			if len(fields) >= 2 && strings.EqualFold(fields[1], "ALIAS") {
+				aliases = append(aliases, fields[0])
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return uniqueSorted(aliases), nil
 }

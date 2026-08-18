@@ -28,6 +28,11 @@ func resolvePrepareWrite(ctx context.Context, root string, m cpm.Manifest, out i
 	if err := cpm.WriteLock(root, lock); err != nil {
 		return err
 	}
+	if m.Managed() {
+		if err := cpm.RenderManagedProject(root, m, lock); err != nil {
+			return err
+		}
+	}
 	fmt.Fprintf(out, "%s (%d packages)\n", message, len(lock.Packages))
 	return nil
 }

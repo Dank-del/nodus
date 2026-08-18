@@ -28,7 +28,7 @@ func initAction(_ context.Context, cmd *cli.Command) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := cpm.WriteManifest(root, cpm.Manifest{ProjectName: name, ProjectVersion: cpm.Version, Dependencies: map[string]string{}}); err != nil {
+	if err := cpm.WriteManifest(root, cpm.Manifest{Format: 2, Project: cpm.Project{Name: name, Version: "0.1.0"}, Dependencies: map[string]string{}}); err != nil {
 		return err
 	}
 	fmt.Fprintf(commandWriter(cmd), "created %s\n", cpm.ManifestName)
