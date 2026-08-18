@@ -1,13 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/Dank-del/cpm/internal/cpm"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -74,47 +72,4 @@ func (p *activityProgress) Stop(success bool) {
 		}
 		_ = p.bar.Exit()
 	})
-}
-
-type packageProgress struct {
-	bar *progressbar.ProgressBar
-}
-
-func newPackageProgress(out io.Writer, total int, description string) *packageProgress {
-	if total == 0 || !supportsProgress(out) {
-		return &packageProgress{}
-	}
-	return &packageProgress{bar: progressbar.NewOptions(total,
-		progressbar.OptionSetWriter(out),
-		progressbar.OptionSetDescription("[cyan]"+description+"[reset]"),
-		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionSetTheme(progressbar.Theme{Saucer: "[cyan]=[reset]", SaucerHead: "[cyan]>[reset]", SaucerPadding: " ", BarStart: "[", BarEnd: "]"}),
-		progressbar.OptionSetWidth(24),
-		progressbar.OptionShowCount(),
-		progressbar.OptionSetPredictTime(true),
-		progressbar.OptionUseANSICodes(true),
-	)}
-}
-
-func (p *packageProgress) StartPackage(pkg cpm.Package) {
-	if p.bar != nil {
-		p.bar.Describe(fmt.Sprintf("[cyan]Preparing %s[reset]", pkg.Name))
-	}
-}
-
-func (p *packageProgress) CompletePackage(_ cpm.Package) {
-	if p.bar != nil {
-		_ = p.bar.Add(1)
-	}
-}
-
-func (p *packageProgress) Stop(success bool) {
-	if p.bar == nil {
-		return
-	}
-	if success {
-		_ = p.bar.Finish()
-		return
-	}
-	_ = p.bar.Exit()
 }

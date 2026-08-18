@@ -1,4 +1,4 @@
-module github.com/Dank-del/cpm
+module github.com/Dank-del/nodus
 
 go 1.26.0
 

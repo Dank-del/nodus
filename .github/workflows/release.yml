@@ -1,4 +1,4 @@
-name: Release CPM
+name: Release Nodus
 
 on:
   workflow_dispatch:
@@ -45,17 +45,17 @@ jobs:
             arch="$2"
             extension="$3"
             archive_type="$4"
-            name="cpm_${VERSION}_${os}_${arch}"
+            name="nodus_${VERSION}_${os}_${arch}"
 
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags='-s -w' -o "dist/cpm${extension}" ./cmd/cpm
+              go build -trimpath -ldflags='-s -w' -o "dist/nodus${extension}" ./cmd/nodus
 
             if [ "$archive_type" = "zip" ]; then
-              (cd dist && zip -q "${name}.zip" "cpm${extension}")
+              (cd dist && zip -q "${name}.zip" "nodus${extension}")
             else
-              tar -C dist -czf "dist/${name}.tar.gz" "cpm${extension}"
+              tar -C dist -czf "dist/${name}.tar.gz" "nodus${extension}"
             fi
-            rm "dist/cpm${extension}"
+            rm "dist/nodus${extension}"
           }
 
           build_archive linux amd64 '' tar.gz
@@ -74,7 +74,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          title="CPM ${VERSION}"
+          title="Nodus ${VERSION}"
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release edit "$VERSION" --title "$title" --prerelease
           else
