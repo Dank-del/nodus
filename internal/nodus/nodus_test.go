@@ -1,20 +1,39 @@
 package nodus
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestVendoredCPMCMakeMatchesPinnedChecksum(t *testing.T) {
-	sum := sha256.Sum256(embeddedCPMCMake)
+	canonical := bytes.ReplaceAll(embeddedCPMCMake, []byte("\r\n"), []byte("\n"))
+	sum := sha256.Sum256(canonical)
 	if got := hex.EncodeToString(sum[:]); got != CPMCMakeSHA256 {
 		t.Fatalf("CPM.cmake checksum = %s, want %s", got, CPMCMakeSHA256)
+	}
+}
+
+func TestLocalPathsUseCMakeSeparators(t *testing.T) {
+	sources := []string{`..\shared\library`}
+	if runtime.GOOS == "windows" {
+		sources = append(sources, `C:\Users\developer\library`)
+	}
+	for _, source := range sources {
+		if !isLocalSource(source) {
+			t.Fatalf("%q was not recognized as a local source", source)
+		}
+		rendered := strings.Join(renderSource(Dependency{Source: source}), "\n")
+		if strings.Contains(rendered, `\`) {
+			t.Fatalf("rendered local path contains a backslash: %s", rendered)
+		}
 	}
 }
 
@@ -109,6 +128,16 @@ func TestLocalCPMCMakeDependencyLocksAndBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := BuildProject(context.Background(), root, BuildOptions{}, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	var runOutput bytes.Buffer
+	if err := RunProject(context.Background(), root, next, BuildOptions{}, nil, &runOutput); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(runOutput.String(), "Hello from app!") {
+		t.Fatalf("unexpected executable output: %q", runOutput.String())
+	}
+	if err := TestProject(context.Background(), root, BuildOptions{}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -141,10 +141,7 @@ func BuildProject(ctx context.Context, root string, options BuildOptions, out io
 	if err := RequireCMake(ctx); err != nil {
 		return "", err
 	}
-	profile, buildType := "debug", "Debug"
-	if options.Release {
-		profile, buildType = "release", "Release"
-	}
+	profile, buildType := buildProfile(options)
 	build := filepath.Join(root, "build", profile)
 	testing := "OFF"
 	if options.Tests {
@@ -168,7 +165,8 @@ func TestProject(ctx context.Context, root string, options BuildOptions, out io.
 	if _, err := exec.LookPath("ctest"); err != nil {
 		return fmt.Errorf("ctest is required: %w", err)
 	}
-	return runTool(ctx, out, "ctest", "--test-dir", build, "--output-on-failure")
+	_, buildType := buildProfile(options)
+	return runTool(ctx, out, "ctest", "--test-dir", build, "-C", buildType, "--output-on-failure")
 }
 
 func RunProject(ctx context.Context, root string, m Manifest, options BuildOptions, args []string, out io.Writer) error {
@@ -179,7 +177,21 @@ func RunProject(ctx context.Context, root string, m Manifest, options BuildOptio
 	if err != nil {
 		return err
 	}
-	return runTool(ctx, out, filepath.Join(build, targetName(m.Project.Name)), args...)
+	target := targetName(m.Project.Name)
+	_, buildType := buildProfile(options)
+	for _, candidate := range []string{filepath.Join(build, target), filepath.Join(build, buildType, target)} {
+		if executable, err := exec.LookPath(candidate); err == nil {
+			return runTool(ctx, out, executable, args...)
+		}
+	}
+	return fmt.Errorf("built executable %q was not found under %s", target, build)
+}
+
+func buildProfile(options BuildOptions) (profile, buildType string) {
+	if options.Release {
+		return "release", "Release"
+	}
+	return "debug", "Debug"
 }
 
 func InitializeGit(ctx context.Context, root string, out io.Writer) error {

@@ -268,7 +268,7 @@ func inspectAction(ctx context.Context, cmd *cli.Command) error {
 		}
 		ref = cmd.String("ref")
 	}
-	if strings.HasPrefix(source, "./") || strings.HasPrefix(source, "../") {
+	if isLocalPath(source) {
 		absolute, absErr := filepath.Abs(source)
 		if absErr != nil {
 			return absErr
@@ -379,6 +379,12 @@ func splitSourceRef(raw string) (string, string, error) {
 	}
 	return value, "", nil
 }
+
+func isLocalPath(value string) bool {
+	return filepath.IsAbs(value) || strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") ||
+		strings.HasPrefix(value, `.\`) || strings.HasPrefix(value, `..\`)
+}
+
 func aliasFromSource(source string) string {
 	value := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(source, "/"), ".git"), ".zip")
 	value = strings.TrimSuffix(value, ".tar.gz")

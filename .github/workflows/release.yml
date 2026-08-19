@@ -17,9 +17,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test-windows:
+    name: Test on Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
   release:
     name: Build and publish ${{ inputs.version }}
     runs-on: ubuntu-latest
+    needs: test-windows
 
     steps:
       - name: Check out source

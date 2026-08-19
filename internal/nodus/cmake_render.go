@@ -44,9 +44,9 @@ func renderSource(dep Dependency) []string {
 		// dependencies.cmake lives at cmake/nodus. Anchor relative paths at
 		// the project root instead of CMake's transient FetchContent build dir.
 		if filepath.IsAbs(source) {
-			return []string{"SOURCE_DIR " + quoteCMake(source)}
+			return []string{"SOURCE_DIR " + quoteCMakePath(source)}
 		}
-		return []string{"SOURCE_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../" + strings.ReplaceAll(source, "\"", "\\\"") + "\""}
+		return []string{"SOURCE_DIR " + quoteCMakePath("${CMAKE_CURRENT_LIST_DIR}/../../"+source)}
 	}
 	if isArchive(source) {
 		return []string{"URL " + quoteCMake(source)}
@@ -82,13 +82,16 @@ func hostedRepository(source, host string) (string, bool) {
 }
 
 func isLocalSource(value string) bool {
-	return strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") || filepath.IsAbs(value)
+	return strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") ||
+		strings.HasPrefix(value, `.\`) || strings.HasPrefix(value, `..\`) ||
+		filepath.IsAbs(value)
 }
 func isArchive(value string) bool {
 	lower := strings.ToLower(strings.Split(value, "?")[0])
 	return strings.HasSuffix(lower, ".zip") || strings.HasSuffix(lower, ".tar") || strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
 }
 func quoteCMake(value string) string           { return "\"" + strings.ReplaceAll(value, "\"", "\\\"") + "\"" }
+func quoteCMakePath(value string) string       { return quoteCMake(strings.ReplaceAll(value, `\`, "/")) }
 func quoteCMakeIdentifier(value string) string { return value }
 func sortedMapKeys(values map[string]string) []string {
 	keys := make([]string, 0, len(values))
