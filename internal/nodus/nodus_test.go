@@ -78,6 +78,15 @@ func TestNodusBlockIsIdempotentAndSafe(t *testing.T) {
 	}
 }
 
+func TestLockHarnessUsesOnlyGeneratedDependencyFiles(t *testing.T) {
+	harness := lockHarness("/tmp/project")
+	for _, expected := range []string{"project(nodus_lock", "/tmp/project/cmake/nodus/CPM.cmake", "/tmp/project/cmake/nodus/dependencies.cmake"} {
+		if !strings.Contains(harness, expected) {
+			t.Fatalf("harness missing %q:\n%s", expected, harness)
+		}
+	}
+}
+
 func TestInitAddsBlockWithoutReplacingExistingCMake(t *testing.T) {
 	root := t.TempDir()
 	original := "cmake_minimum_required(VERSION 3.14)\nproject(existing LANGUAGES CXX)\nadd_executable(existing main.cpp)\n"
@@ -162,6 +171,32 @@ func TestFailedRefreshDoesNotPersistManifest(t *testing.T) {
 	}
 	if len(loaded.Dependencies) != 0 {
 		t.Fatalf("failed dependency persisted: %#v", loaded.Dependencies)
+	}
+}
+
+func TestDependencyCanBeAddedBeforeExistingProjectLinksResolve(t *testing.T) {
+	if err := RequireCMake(context.Background()); err != nil {
+		t.Skipf("CMake unavailable: %v", err)
+	}
+	root := t.TempDir()
+	cmake := "cmake_minimum_required(VERSION 3.14)\nproject(existing)\nadd_library(app INTERFACE)\ntarget_link_libraries(app INTERFACE dep::dep)\n"
+	if err := os.WriteFile(filepath.Join(root, "CMakeLists.txt"), []byte(cmake), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := InitProject(root, "existing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependency := filepath.Join(root, "dependency")
+	if err := os.MkdirAll(dependency, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dependency, "CMakeLists.txt"), []byte("cmake_minimum_required(VERSION 3.14)\nproject(dep)\nadd_library(dep INTERFACE)\nadd_library(dep::dep ALIAS dep)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.Dependencies["dep"] = Dependency{Source: dependency}
+	if err := SyncDependencies(context.Background(), root, m, io.Discard); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -42,14 +42,31 @@ func (CMakeBackend) RefreshLock(ctx context.Context, root string, out io.Writer)
 	if err := RequireCMake(ctx); err != nil {
 		return err
 	}
-	build := filepath.Join(root, ".nodus", "lock")
-	if err := runTool(ctx, out, "cmake", "-S", root, "-B", build); err != nil {
+	// Locking intentionally configures only the generated dependency graph. An
+	// existing application may link several packages before each declaration has
+	// been added; configuring the application itself would make `nodus add`
+	// unable to migrate it one dependency at a time.
+	harness := filepath.Join(root, ".nodus", "lock-source", "CMakeLists.txt")
+	if err := atomicWrite(harness, []byte(lockHarness(root)), 0o644); err != nil {
+		return err
+	}
+	build := filepath.Join(root, ".nodus", "lock-build")
+	if err := runTool(ctx, out, "cmake", "-S", filepath.Dir(harness), "-B", build); err != nil {
 		return fmt.Errorf("CMake configuration failed; the existing lock was kept: %w", err)
 	}
 	if err := runTool(ctx, out, "cmake", "--build", build, "--target", "cpm-update-package-lock"); err != nil {
 		return fmt.Errorf("CPM.cmake could not update its package lock: %w", err)
 	}
 	return nil
+}
+
+func lockHarness(root string) string {
+	base := filepath.ToSlash(root)
+	return "cmake_minimum_required(VERSION 3.14)\nproject(nodus_lock LANGUAGES C CXX)\n" +
+		"set(EXTRACTED_CPM_VERSION \"" + CPMCMakeVersion + "\")\n" +
+		"include(\"" + base + "/cmake/nodus/CPM.cmake\")\n" +
+		"CPMUsePackageLock(\"" + base + "/cmake/nodus/package-lock.cmake\")\n" +
+		"include(\"" + base + "/cmake/nodus/dependencies.cmake\")\n"
 }
 
 func (CMakeBackend) Install(ctx context.Context, root string, out io.Writer) error {
